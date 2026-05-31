@@ -1,5 +1,6 @@
 #include "SMeterWidget.h"
 
+#include <QAccessible>
 #include <QPainter>
 #include <QPainterPath>
 #include <QSet>
@@ -15,6 +16,7 @@ SMeterWidget::SMeterWidget(QWidget* parent)
 {
     setMinimumSize(minimumSizeHint());
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    setFocusPolicy(Qt::TabFocus);
 
     m_needleFraction = dbmToFraction(m_levelDbm);
     m_targetNeedleFraction = m_needleFraction;
@@ -73,6 +75,10 @@ void SMeterWidget::setLevel(float dbm)
 
     if (!m_transmitting) {
         update();
+        if (hasFocus()) {
+            QAccessibleValueChangeEvent event(this, QVariant(dbm));
+            QAccessible::updateAccessibility(&event);
+        }
     }
 }
 

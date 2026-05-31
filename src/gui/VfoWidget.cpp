@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QSlider>
 #include <QGraphicsOpacityEffect>
+#include <QAccessible>
 #include <QLineEdit>
 #include <QComboBox>
 #include <QStackedWidget>
@@ -3263,6 +3264,8 @@ void VfoWidget::updateFreqLabel()
     if (!m_slice) return;
     if (m_slice->isLockedFeedbackActive()) {
         m_freqLabel->setText(QStringLiteral("LOCKED"));
+        QAccessibleValueChangeEvent lockedEvt(m_freqLabel, QStringLiteral("LOCKED"));
+        QAccessible::updateAccessibility(&lockedEvt);
         if (m_collapsed && m_collapsedFreqLabel) {
             m_collapsedFreqLabel->setText(QStringLiteral("LOCKED"));
             m_collapsedFreqLabel->adjustSize();
@@ -3279,6 +3282,8 @@ void VfoWidget::updateFreqLabel()
         .arg(khzPart, 3, 10, QChar('0'))
         .arg(hzPart, 3, 10, QChar('0'));
     m_freqLabel->setText(freqText);
+    QAccessibleValueChangeEvent freqEvt(m_freqLabel, freqText);
+    QAccessible::updateAccessibility(&freqEvt);
 
     // Keep collapsed frequency label in sync
     if (m_collapsed && m_collapsedFreqLabel) {
