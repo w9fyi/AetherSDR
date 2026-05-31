@@ -176,6 +176,12 @@ private:
     int            m_angleAccum{0};     // mouse wheel angle accumulator
     qint64         m_lastWheelMs{0};    // debounce: timestamp of last accepted wheel step
     QPointer<QLabel> m_collapsedFreqLabel;
+
+    // Accessibility: debounced frequency announcement (300 ms settle before speaking)
+    QTimer   m_accessibleFrequencyTimer;
+    QString  m_pendingAccessibleFrequencyText;
+    QString  m_lastAccessibleFrequencyText;
+    void     scheduleFrequencyAnnouncement(const QString& text);
     QSet<QWidget*> m_hiddenBeforeCollapse;    // widgets already hidden before collapse
 
     // Header row

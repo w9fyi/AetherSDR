@@ -273,6 +273,15 @@ VfoWidget::VfoWidget(QWidget* parent)
     m_signalMeterAnimation.setInterval(kSignalMeterAnimationIntervalMs);
     connect(&m_signalMeterAnimation, &QTimer::timeout, this, &VfoWidget::animateSignalMeter);
 
+    m_accessibleFrequencyTimer.setSingleShot(true);
+    connect(&m_accessibleFrequencyTimer, &QTimer::timeout, this, [this]() {
+        if (!QAccessible::isActive()) return;
+        if (m_pendingAccessibleFrequencyText == m_lastAccessibleFrequencyText) return;
+        m_lastAccessibleFrequencyText = m_pendingAccessibleFrequencyText;
+        QAccessibleValueChangeEvent event(m_freqLabel, m_pendingAccessibleFrequencyText);
+        QAccessible::updateAccessibility(&event);
+    });
+
     buildUI();
 
     connect(&SliceColorManager::instance(), &SliceColorManager::colorsChanged,
@@ -3290,8 +3299,14 @@ void VfoWidget::updateFreqLabel()
     if (!m_slice) return;
     if (m_slice->isLockedFeedbackActive()) {
         m_freqLabel->setText(QStringLiteral("LOCKED"));
-        QAccessibleValueChangeEvent lockedEvt(m_freqLabel, QStringLiteral("LOCKED"));
-        QAccessible::updateAccessibility(&lockedEvt);
+        // Announce immediately — lock state is user-triggered and infrequent.
+        // Suppress repeats while the 500 ms lock-feedback gate is active.
+        if (QAccessible::isActive() &&
+            m_lastAccessibleFrequencyText != QStringLiteral("LOCKED")) {
+            m_lastAccessibleFrequencyText = QStringLiteral("LOCKED");
+            QAccessibleValueChangeEvent lockedEvt(m_freqLabel, QStringLiteral("LOCKED"));
+            QAccessible::updateAccessibility(&lockedEvt);
+        }
         if (m_collapsed && m_collapsedFreqLabel) {
             m_collapsedFreqLabel->setText(QStringLiteral("LOCKED"));
             m_collapsedFreqLabel->adjustSize();
@@ -3308,14 +3323,20 @@ void VfoWidget::updateFreqLabel()
         .arg(khzPart, 3, 10, QChar('0'))
         .arg(hzPart, 3, 10, QChar('0'));
     m_freqLabel->setText(freqText);
-    QAccessibleValueChangeEvent freqEvt(m_freqLabel, freqText);
-    QAccessible::updateAccessibility(&freqEvt);
+    scheduleFrequencyAnnouncement(freqText);
 
     // Keep collapsed frequency label in sync
     if (m_collapsed && m_collapsedFreqLabel) {
         m_collapsedFreqLabel->setText(freqText);
         m_collapsedFreqLabel->adjustSize();
     }
+}
+
+void VfoWidget::scheduleFrequencyAnnouncement(const QString& text)
+{
+    if (!QAccessible::isActive()) return;
+    m_pendingAccessibleFrequencyText = text;
+    m_accessibleFrequencyTimer.start(300);  // restart on each tune step; fires once settled
 }
 
 void VfoWidget::updateFilterLabel()
