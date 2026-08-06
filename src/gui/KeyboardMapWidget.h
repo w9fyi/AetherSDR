@@ -21,6 +21,13 @@ public:
 
     QColor categoryColor(const QString& category) const;
 
+    // Spoken description of the keyboard-focused key ("F: unbound",
+    // "J: Filter Center"). Consumed by KeyboardMapWidgetAccessible — the
+    // QAccessibleInterface implemented for this widget in
+    // KeyboardMapWidget.cpp — as the live AXValue, so AT tools track focus
+    // as it moves across the grid the same way announceKey() already does.
+    QString accessibleKeyDescription() const;
+
 signals:
     void keySelected(Qt::Key key);
 

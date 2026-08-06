@@ -2,6 +2,7 @@
 #include "core/ShortcutManager.h"
 
 #include <QAccessible>
+#include <QAccessibleWidget>
 #include <QFocusEvent>
 #include <QKeyEvent>
 #include <QPainter>
@@ -9,6 +10,37 @@
 #include "core/ThemeManager.h"
 
 namespace AetherSDR {
+
+// ── Accessibility ─────────────────────────────────────────────────────────────
+// KeyboardMapWidget is fully custom-painted with no child QWidgets, so unlike
+// a QTableWidget it gets nothing from Qt's default widget accessibility
+// wrapper — a bare setAccessibleName() with no registered QAccessibleInterface
+// leaves it absent from the platform AX tree entirely (confirmed via a live
+// AX-tree dump: it doesn't appear anywhere in the app, so VoiceOver has no
+// element to focus and the arrow-key navigation below is unreachable). Every
+// other custom-painted widget in this codebase (SMeterWidget, VfoWidget,
+// HGauge/RelayBar) registers an explicit QAccessibleWidget subclass for
+// exactly this reason — this was the one that got missed.
+class KeyboardMapWidgetAccessible : public QAccessibleWidget {
+public:
+    explicit KeyboardMapWidgetAccessible(QWidget* w)
+        : QAccessibleWidget(w, QAccessible::Grouping) {}
+    QString text(QAccessible::Text t) const override
+    {
+        if (t == QAccessible::Value) {
+            if (auto* kmw = qobject_cast<KeyboardMapWidget*>(widget()))
+                return kmw->accessibleKeyDescription();
+        }
+        return QAccessibleWidget::text(t);
+    }
+};
+
+static QAccessibleInterface* keyboardMapAccessibleFactory(const QString& key, QObject* obj)
+{
+    if (key == QLatin1String("AetherSDR::KeyboardMapWidget"))
+        return new KeyboardMapWidgetAccessible(qobject_cast<QWidget*>(obj));
+    return nullptr;
+}
 
 // ─── Category colors ────────────────────────────────────────────────────────
 
@@ -36,6 +68,12 @@ QColor KeyboardMapWidget::categoryColor(const QString& cat) const
 KeyboardMapWidget::KeyboardMapWidget(ShortcutManager* mgr, QWidget* parent)
     : QWidget(parent), m_mgr(mgr)
 {
+    static bool s_a11yFactoryInstalled = false;
+    if (!s_a11yFactoryInstalled) {
+        s_a11yFactoryInstalled = true;
+        QAccessible::installFactory(keyboardMapAccessibleFactory);
+    }
+
     setMouseTracking(true);
     setFocusPolicy(Qt::TabFocus);
     setAccessibleName(tr("Keyboard shortcut map"));
@@ -451,15 +489,21 @@ void KeyboardMapWidget::selectFocusKey()
     announceKey(m_focusIdx);
 }
 
+QString KeyboardMapWidget::accessibleKeyDescription() const
+{
+    if (m_focusIdx < 0 || m_focusIdx >= m_keys.size()) return {};
+    const KeyCap& k = m_keys[m_focusIdx];
+    QKeySequence seq(k.qtKey);
+    const auto* act = m_mgr->actionForKey(seq);
+    return act
+        ? tr("%1: %2").arg(k.label, act->displayName)
+        : tr("%1: unbound").arg(k.label);
+}
+
 void KeyboardMapWidget::announceKey(int idx)
 {
     if (idx < 0 || idx >= m_keys.size()) return;
-    const KeyCap& k = m_keys[idx];
-    QKeySequence seq(k.qtKey);
-    const auto* act = m_mgr->actionForKey(seq);
-    QString desc = act
-        ? tr("%1: %2").arg(k.label, act->displayName)
-        : tr("%1: unbound").arg(k.label);
+    const QString desc = accessibleKeyDescription();
     setAccessibleDescription(desc);
     QAccessibleValueChangeEvent event(this, desc);
     QAccessible::updateAccessibility(&event);
